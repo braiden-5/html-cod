@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Ultimate FPS Fake Multiplayer</title>
+<style>
+body { margin:0; overflow:hidden; background:#111; }
+#menu {
+  position:fixed; inset:0;
+  background:#111; color:white;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  font-family:Arial;
+}
+#hud {
+  position:fixed; bottom:20px; left:20px;
+  color:white; font-family:Arial; font-size:18px;
+}
+select, button { font-size:18px; padding:10px; margin:10px; }
+</style>
+</head>
+<body>
+
+<div id="menu">
+  <h1>Ultimate FPS</h1>
+  <p>Highest Unlocked Level: <span id="unlockedUI"></span></p>
+  <label>Select Difficulty (1–20)</label>
+  <select id="difficulty"></select>
+  <button onclick="startGame()">Start Game</button>
+</div>
+
+<div id="hud" style="display:none">
+HP: <span id="hp">100</span> | Difficulty: <span id="diffUI"></span>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/PointerLockControls.js"></script>
+
+<script>
+///////////////////////
+// SAVE & DIFFICULTY
+///////////////////////
+let unlocked = Number(localStorage.getItem("unlocked")) || 1;
+document.getElementById("unlockedUI").textContent = unlocked;
+
+const diffSelect = document.getElementById("difficulty");
+function updateMenu(){
+  diffSelect.innerHTML = "";
+  for(let i=1;i<=20;i++){
+    const opt=document.createElement("option");
+    opt.value=i;
+    opt.textContent=i+(i===20?" (BOSS)":"");
+    if(i>unlocked) opt.disabled=true;
+    diffSelect.appendChild(opt);
+  }
+}
+updateMenu();
+
+///////////////////////
+// GAME VARIABLES
+///////////////////////
+let scene, camera, renderer, controls;
+let playerHP = 100;
+let bots = [];
+let DIFFICULTY = 1;
+
+///////////////////////
+// START GAME
+///////////////////////
+function startGame(){
+  DIFFICULTY = Number(diffSelect.value);
+  document.getElementById("menu").style.display="none";
+  document.getElementById("hud").style.display="block";
+  document.getElementById("diffUI").textContent = DIFFICULTY;
+  initGame();
+}
+
+///////////////////////
+// INIT GAME
+///////////////////////
+function initGame(){
+  const BOT_COUNT = DIFFICULTY===20?2:3+DIFFICULTY;
+  const BOT_HP = DIFFICULTY===20?600:40+DIFFICULTY*6;
+  const BOT_DAMAGE = DIFFICULTY===20?10:2+DIFFICULTY;
+  const BOT_SPEED = DIFFICULTY===20?0.01:0.002+DIFFICULTY*0.0004;
+  const BOT_FIRE = Math.max(80-DIFFICULTY*3,20);
+
+  // Scene & Camera
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x202020);
+  camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+  renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(innerWidth, innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  // Lighting
+  scene.add(new THREE.HemisphereLight(0xffffff,0x444444,1));
+  const sun = new THREE.DirectionalLight(0xffffff,0.6);
+  sun.position.set(10,30,10);
+  scene.add(sun);
+
+  // Controls
+  controls = new THREE.PointerLockControls(camera, document.body);
+  document.body.onclick = ()=>controls.lock();
+  scene.add(controls.getObject());
+
+  // Floor
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(300,300),
+    new THREE.MeshStandardMaterial({color:0x555555})
+  );
+  floor.rotation.x = -Math.PI/2;
+  scene.add(floor);
+
+  // Buildings
+  function building(x,z,w,h,d){
+    const b = new THREE.Mesh(
+      new THREE.BoxGeometry(w,h,d),
+      new THREE.MeshStandardMaterial({color:0x777777})
+    );
+    b.position.set(x,h/2,z);
+    scene.add(b);
+  }
+  building(20,-20,15,10,15);
+  building(-30,10,20,12,20);
+  building(0,30,25,8,15);
+
+  // Gun
+  const gun = new THREE.Mesh(
+    new THREE.BoxGeometry(0.3,0.2,1),
+    new THREE.MeshStandardMaterial({color:0x222222})
+  );
+  gun.position.set(0.3,-0.3,-1);
+  camera.add(gun);
+
+  // Bots / Fake Players
+  bots = [];
+  for(let i=0;i<BOT_COUNT;i++){
+    const color = Math.random()>0.5?0x44ff44:0x4444ff;
+    const bot = new THREE.Mesh(
+      DIFFICULTY===20?new THREE.CapsuleGeometry(2,4):new THREE.CapsuleGeometry(1,2),
+      new THREE.MeshStandardMaterial({color})
+    );
+    bot.position.set(Math.random()*80-40,2,Math.random()*80-40);
+    bot.hp = BOT_HP;
+    bot.cool = Math.floor(Math.random()*100);
+    bot.target = new THREE.Vector3(bot.position.x,2,bot.position.z);
+    scene.add(bot);
+    bots.push(bot);
+  }
+
+  // Player movement
+  const keys={};
+  addEventListener("keydown", e=>keys[e.code]=true);
+  addEventListener("keyup", e=>keys[e.code]=false);
+
+  // Shooting
+  const raycaster = new THREE.Raycaster();
+  addEventListener("mousedown", ()=>{
+    gun.position.z-=0.1;
+    setTimeout(()=>gun.position.z+=0.1,60);
+    raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+    const hits = raycaster.intersectObjects(bots);
+    if(hits.length){
+      const b = hits[0].object;
+      b.hp -= 40;
+      if(b.hp<=0){
+        scene.remove(b);
+        bots.splice(bots.indexOf(b),1);
+      }
+    }
+  });
+
+  ///////////////////////
+  // GAME LOOP
+  ///////////////////////
+  function animate(){
+    requestAnimationFrame(animate);
+
+    // Player movement
+    const speed = 0.15;
+    if(keys.KeyW) controls.moveForward(speed);
+    if(keys.KeyS) controls.moveForward(-speed);
+    if(keys.KeyA) controls.moveRight(-speed);
+    if(keys.KeyD) controls.moveRight(speed);
+
+    // Bots AI
+    bots.forEach(bot=>{
+      // Random patrol
+      if(Math.random()<0.01){
+        bot.target.set(Math.random()*80-40,2,Math.random()*80-40);
+      }
+      bot.position.lerp(bot.target,BOT_SPEED);
+
+      // Shoot player
+      const dist = bot.position.distanceTo(camera.position);
+      if(dist<25 && bot.cool<=0){
+        playerHP -= BOT_DAMAGE;
+        document.getElementById("hp").textContent = playerHP;
+        bot.cool = BOT_FIRE;
+        if(playerHP<=0){
+          alert("You died!");
+          location.reload();
+        }
+      }
+      bot.cool--;
+
+      // Shoot other bots (fake multiplayer feel)
+      bots.forEach(other=>{
+        if(bot===other) return;
+        if(Math.random()<0.002){
+          const d = bot.position.distanceTo(other.position);
+          if(d<20){
+            other.hp -= 5;
+            if(other.hp<=0){
+              scene.remove(other);
+              bots.splice(bots.indexOf(other),1);
+            }
+          }
+        }
+      });
+    });
+
+    // WIN
+    if(bots.length===0){
+      if(DIFFICULTY===unlocked && unlocked<20){
+        unlocked++;
+        localStorage.setItem("unlocked", unlocked);
+      }
+      alert(DIFFICULTY===20?"BOSS DEFEATED!":"Level Cleared!");
+      location.reload();
+    }
+
+    renderer.render(scene,camera);
+  }
+  animate();
+}
+
+addEventListener("resize", ()=>{
+  if(!camera) return;
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
