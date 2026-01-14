@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>COD-style FPS Fix</title>
+<title>COD-Style FPS</title>
 <style>
 body { margin:0; overflow:hidden; background:#000; }
 #hud {
@@ -22,134 +22,163 @@ let scene, camera, renderer, controls;
 let bots = [];
 let playerHP = 100;
 const hpUI = document.getElementById("hp");
-const BOT_COUNT = 10;
+const BOT_COUNT = 8;
 
-function init(){
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x87CEEB); // sky blue
+function init() {
+    // Scene
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x800080); // purple sky
 
-  // Camera
-  camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
-  camera.position.set(0,1.6,0); // player height
-  renderer = new THREE.WebGLRenderer({antialias:true});
-  renderer.setSize(innerWidth,innerHeight);
-  document.body.appendChild(renderer.domElement);
+    // Camera
+    camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+    camera.position.set(0,1.6,5); // eye height
 
-  // Lighting
-  const hemi = new THREE.HemisphereLight(0xffffff,0x444444,1.2);
-  scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xffffff,0.8);
-  sun.position.set(20,50,20);
-  scene.add(sun);
+    // Renderer
+    renderer = new THREE.WebGLRenderer({antialias:true});
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.appendChild(renderer.domElement);
 
-  // Controls
-  controls = new THREE.PointerLockControls(camera, document.body);
-  document.body.onclick=()=>controls.lock();
-  scene.add(controls.getObject());
+    // Lights
+    const hemi = new THREE.HemisphereLight(0xffffff,0x444444,1.2);
+    scene.add(hemi);
+    const sun = new THREE.DirectionalLight(0xffffff,0.8);
+    sun.position.set(50,50,50);
+    scene.add(sun);
 
-  // Floor
-  const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(200,200),
-    new THREE.MeshStandardMaterial({color:0x666666})
-  );
-  floor.rotation.x=-Math.PI/2;
-  scene.add(floor);
+    // Controls
+    controls = new THREE.PointerLockControls(camera, document.body);
+    document.body.onclick = () => controls.lock();
+    scene.add(controls.getObject());
 
-  // Buildings
-  function building(x,z,w,h,d){
-    const b = new THREE.Mesh(
-      new THREE.BoxGeometry(w,h,d),
-      new THREE.MeshStandardMaterial({color:0x999999})
-    );
-    b.position.set(x,h/2,z);
-    scene.add(b);
-  }
-  building(-50,-50,20,10,20);
-  building(50,-50,20,10,20);
-  building(-50,50,20,10,20);
-  building(50,50,20,10,20);
-  building(0,0,30,8,30);
+    // Floor
+    const floorMat = new THREE.MeshStandardMaterial({color:0x555555});
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(200,200), floorMat);
+    floor.rotation.x = -Math.PI/2;
+    scene.add(floor);
 
-  // Gun
-  const gun = new THREE.Mesh(
-    new THREE.BoxGeometry(0.3,0.2,1),
-    new THREE.MeshStandardMaterial({color:0x222222})
-  );
-  gun.position.set(0.3,-0.3,-1);
-  camera.add(gun);
-
-  // Bots
-  bots=[];
-  for(let i=0;i<BOT_COUNT;i++){
-    const color = Math.random()>0.5?0x44ff44:0x4444ff;
-    const bot = new THREE.Mesh(
-      new THREE.CapsuleGeometry(1,2),
-      new THREE.MeshStandardMaterial({color})
-    );
-    bot.position.set(Math.random()*80-40,1,Math.random()*80-40);
-    bot.hp=100;
-    bot.cool=Math.floor(Math.random()*100);
-    bot.target=new THREE.Vector3(bot.position.x,1,bot.position.z);
-    scene.add(bot);
-    bots.push(bot);
-  }
-
-  // Movement
-  const keys={};
-  addEventListener("keydown", e=>keys[e.code]=true);
-  addEventListener("keyup", e=>keys[e.code]=false);
-
-  const raycaster = new THREE.Raycaster();
-  addEventListener("mousedown", ()=>{
-    gun.position.z-=0.1;
-    setTimeout(()=>gun.position.z+=0.1,60);
-    raycaster.setFromCamera(new THREE.Vector2(0,0),camera);
-    const hits = raycaster.intersectObjects(bots);
-    if(hits.length){
-      const b = hits[0].object;
-      b.hp-=40;
-      if(b.hp<=0){
-        scene.remove(b);
-        bots.splice(bots.indexOf(b),1);
-      }
+    // Buildings (COD-style)
+    function building(x,z,w,h,d){
+        const b = new THREE.Mesh(
+            new THREE.BoxGeometry(w,h,d),
+            new THREE.MeshStandardMaterial({color:0x999999})
+        );
+        b.position.set(x,h/2,z);
+        scene.add(b);
     }
-  });
+    building(-50,-50,20,10,20);
+    building(50,-50,20,10,20);
+    building(-50,50,20,10,20);
+    building(50,50,20,10,20);
+    building(0,0,30,10,30);
 
-  // Animate
-  function animate(){
-    requestAnimationFrame(animate);
+    // Boxes / cover
+    function box(x,z,w,h,d){
+        const b = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshStandardMaterial({color:0x666666}));
+        b.position.set(x,h/2,z);
+        scene.add(b);
+    }
+    box(-20,0,5,3,5);
+    box(20,0,5,3,5);
+    box(0,-20,5,3,5);
+    box(0,20,5,3,5);
 
-    const speed=0.15;
-    if(keys.KeyW) controls.moveForward(speed);
-    if(keys.KeyS) controls.moveForward(-speed);
-    if(keys.KeyA) controls.moveRight(-speed);
-    if(keys.KeyD) controls.moveRight(speed);
+    // Gun
+    const gun = new THREE.Mesh(
+        new THREE.BoxGeometry(0.3,0.2,1),
+        new THREE.MeshStandardMaterial({color:0x222222})
+    );
+    gun.position.set(0.3,-0.3,-1);
+    camera.add(gun);
 
-    bots.forEach(bot=>{
-      if(Math.random()<0.01) bot.target.set(Math.random()*80-40,1,Math.random()*80-40);
-      bot.position.lerp(bot.target,0.003);
+    // Bots
+    bots = [];
+    for(let i=0;i<BOT_COUNT;i++){
+        const bot = new THREE.Mesh(
+            new THREE.CapsuleGeometry(1,2),
+            new THREE.MeshStandardMaterial({color: Math.random()>0.5?0x44ff44:0x4444ff})
+        );
+        bot.position.set(Math.random()*80-40,1,Math.random()*80-40);
+        bot.hp = 100;
+        bot.cool = Math.floor(Math.random()*100);
+        bot.target = bot.position.clone();
+        scene.add(bot);
+        bots.push(bot);
+    }
 
-      const dist = bot.position.distanceTo(camera.position);
-      if(dist<25 && bot.cool<=0){
-        playerHP-=5;
-        hpUI.textContent=playerHP;
-        bot.cool=60;
-        if(playerHP<=0){alert("You died!"); location.reload();}
-      }
-      bot.cool--;
+    // Movement
+    const keys = {};
+    addEventListener("keydown", e=>keys[e.code]=true);
+    addEventListener("keyup", e=>keys[e.code]=false);
+
+    const raycaster = new THREE.Raycaster();
+    addEventListener("mousedown", ()=>{
+        gun.position.z -= 0.1;
+        setTimeout(()=>gun.position.z += 0.1,60);
+        raycaster.setFromCamera(new THREE.Vector2(0,0),camera);
+        const hits = raycaster.intersectObjects(bots);
+        if(hits.length){
+            const b = hits[0].object;
+            b.hp -= 40;
+            if(b.hp <= 0){
+                scene.remove(b);
+                bots.splice(bots.indexOf(b),1);
+            }
+        }
     });
 
-    renderer.render(scene,camera);
-  }
-  animate();
+    function animate(){
+        requestAnimationFrame(animate);
+
+        // Player movement
+        const speed = 0.15;
+        if(keys.KeyW) controls.moveForward(speed);
+        if(keys.KeyS) controls.moveForward(-speed);
+        if(keys.KeyA) controls.moveRight(-speed);
+        if(keys.KeyD) controls.moveRight(speed);
+
+        // Bots AI
+        bots.forEach(bot=>{
+            if(Math.random() < 0.01) bot.target.set(Math.random()*80-40,1,Math.random()*80-40);
+            bot.position.lerp(bot.target,0.003);
+
+            // Shoot player if close
+            if(bot.position.distanceTo(camera.position) < 25 && bot.cool <= 0){
+                playerHP -= 5;
+                hpUI.textContent = playerHP;
+                bot.cool = 60;
+                if(playerHP <= 0){
+                    alert("You died!");
+                    location.reload();
+                }
+            }
+            bot.cool--;
+
+            // Bots shoot each other
+            bots.forEach(other=>{
+                if(bot===other) return;
+                if(Math.random()<0.002){
+                    if(bot.position.distanceTo(other.position)<20){
+                        other.hp -= 5;
+                        if(other.hp<=0){
+                            scene.remove(other);
+                            bots.splice(bots.indexOf(other),1);
+                        }
+                    }
+                }
+            });
+        });
+
+        renderer.render(scene,camera);
+    }
+    animate();
 }
 
 init();
 
 addEventListener("resize", ()=>{
-  camera.aspect=innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight);
+    camera.aspect = innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth,innerHeight);
 });
 </script>
 </body>
